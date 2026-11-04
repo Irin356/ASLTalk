@@ -4,11 +4,11 @@ ASLTalk is a real-time, browser-based American Sign Language (ASL) communication
 
 ## Tech Stack
 
-**Languages and markup:** HTML5, CSS3, JavaScript, Python.
+**Languages and markup:** Python (primary AI/ML and backend language), HTML5, CSS3, JavaScript.
 
 **Frontend and UI:** Tailwind CSS, Responsive Web Design, Canvas API, HTML5 Video, Material Symbols, Progressive Web App (PWA) styles and metadata.
 
-**AI/ML and computer vision:** MediaPipe Tasks Vision, MediaPipe Hand Landmarker, WebAssembly, normalized 21-point hand landmarks, a Python nearest-neighbor handshape classifier, and a judge-safe camera-free demo mode.
+**AI/ML and computer vision:** Python nearest-neighbor handshape classifier, Euclidean distance voting, confidence calculation, Python sample persistence and prediction API, MediaPipe Tasks Vision, MediaPipe Hand Landmarker, WebAssembly, normalized 21-point hand landmarks, and a judge-safe camera-free demo mode. Python is the primary language for all custom AI/ML logic; there is no JavaScript classifier fallback.
 
 **Backend and data:** Python standard-library HTTP server, JSON, REST-style HTTP endpoints, Local Storage, Session Storage, and JSON sample persistence through the Python server.
 
@@ -244,4 +244,4 @@ Open settings to control vibration, visual flashing, speech output, and larger t
 
 ## Submission Tags
 
-Python, JavaScript, HTML, CSS, HTML5, Tailwind CSS, MediaPipe Hand Landmarker, MediaPipe Tasks Vision, WebAssembly, AI, ML, Computer Vision, nearest-neighbor classifier, REST API, Python HTTP server, JSON, PWA, Progressive Web App, Service Worker, Web APIs, Web Camera API, MediaDevices API, getUserMedia, Canvas API, Web Speech API, Web Speech Recognition API, Speech Synthesis API, Screen Wake Lock API, Vibration API, Local Storage, Session Storage, Responsive Web Design, browser-app.
+Python Primary AI/ML Language, Python AI, Python Machine Learning, Python Nearest-Neighbor Classifier, Python HTTP Server, MediaPipe Hand Landmarker, MediaPipe Tasks Vision, WebAssembly, Computer Vision, 21-Point Hand Landmarks, Euclidean Distance, Confidence Voting, REST API, JSON, JavaScript, HTML, CSS, HTML5, Tailwind CSS, PWA, Progressive Web App, Service Worker, Web APIs, Web Camera API, MediaDevices API, getUserMedia, Canvas API, Web Speech API, Web Speech Recognition API, Speech Synthesis API, Screen Wake Lock API, Vibration API, Local Storage, Session Storage, Responsive Web Design, Hackathon Prototype.
