@@ -4,15 +4,241 @@
 const $=id=>document.getElementById(id), box=$('screen-confirm'); let pending='';
 const speak=t=>{if(window.aslSettings&&window.aslSettings.speak===false)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=.95;speechSynthesis.speak(u);};
 const q=t=>'\u201C'+t+'\u201D';
+try{window.aslCustomPhrases=JSON.parse(localStorage.getItem('asltalk-custom-phrases-v1')||'{}');}catch(e){window.aslCustomPhrases={};}
+window.forwardSignedPhrase=text=>{
+  const value=String(text||'').replace(/^[\u201C"]+|[\u201D"]+$/g,'').trim();
+  const staff=$('f2-staff-text');
+  if(value&&staff)staff.textContent=value;
+};
+window.forwardStaffReply=text=>{
+  const value=String(text||'').replace(/^[\u201C"]+|[\u201D"]+$/g,'').trim();
+  const patient=$('f2-hear');
+  const heard=$('f2-staff-hear');
+  if(value&&patient)patient.textContent=value;
+  if(value&&heard)heard.textContent=value;
+};
+function setupConfirmationModal(){
+  const card=box.querySelector(':scope > div');
+  const place=()=>{
+    const desktop=window.innerWidth>=1024;
+    box.style.position='fixed';
+    box.style.inset='0';
+    box.style.zIndex='2147483000';
+    box.style.overflow='auto';
+    box.style.padding='16px';
+    if(!desktop){
+      box.style.alignItems='center';
+      box.style.justifyContent='flex-end';
+      box.style.background='rgba(11,14,20,.60)';
+      box.style.pointerEvents='auto';
+      box.style.backdropFilter='blur(8px)';
+      if(card){
+        card.style.width='min(560px, calc(100vw - 32px))';
+        card.style.maxHeight='calc(100dvh - 32px)';
+        card.style.overflow='auto';
+        card.style.margin='0';
+        card.style.position='relative';
+        card.style.left='';
+        card.style.right='';
+        card.style.top='';
+        card.style.bottom='';
+        card.style.zIndex='2147483001';
+      }
+      const action=$('btn-retry')?.parentElement;
+      if(action)action.style.gridTemplateColumns=window.innerWidth<420?'repeat(2, minmax(0, 1fr))':'repeat(3, minmax(0, 1fr))';
+      return;
+    }
+
+    const replyButton=[...document.querySelectorAll('button')].find(el=>/Type Reply|Staff: type a reply/i.test(el.textContent||''));
+    const replyRect=replyButton?.getBoundingClientRect();
+    let streamCard=null;
+    let ancestor=replyButton?.parentElement;
+    while(ancestor){
+      const rect=ancestor.getBoundingClientRect();
+      if(rect.width>=350&&rect.width<=800&&rect.left>=600){
+        streamCard=ancestor;
+        break;
+      }
+      ancestor=ancestor.parentElement;
+    }
+    const streamRect=streamCard?.getBoundingClientRect();
+    const left=Math.max(16,(streamRect?.left||replyRect?.left||16));
+    const right=Math.max(left+280,(streamRect?.right||replyRect?.right||window.innerWidth-16));
+    const top=Math.min(window.innerHeight-238,(replyRect?.bottom||390)+12);
+    const width=Math.max(280,Math.min(520,right-left));
+    box.style.alignItems='flex-start';
+    box.style.justifyContent='flex-start';
+    box.style.background='transparent';
+    box.style.pointerEvents='none';
+    box.style.backdropFilter='none';
+    if(card){
+      card.style.position='fixed';
+      card.style.left=left+'px';
+      card.style.top=top+'px';
+      card.style.right='auto';
+      card.style.bottom='auto';
+      card.style.width=width+'px';
+      card.style.maxHeight=Math.max(190,window.innerHeight-top-16)+'px';
+      card.style.overflow='auto';
+      card.style.margin='0';
+      card.style.pointerEvents='auto';
+      card.style.zIndex='2147483001';
+    }
+    const action=$('btn-retry')?.parentElement;
+    if(action)action.style.gridTemplateColumns='repeat(3, minmax(0, 1fr))';
+  };
+  place();
+  if(!window.__aslConfirmResizeBound){
+    window.__aslConfirmResizeBound=true;
+    window.addEventListener('resize',()=>{if(box.style.display==='flex')place();});
+  }
+  const action=$('btn-retry')?.parentElement;
+  if(action){
+    action.style.gridTemplateColumns='repeat(3, minmax(0, 1fr))';
+  }
+  if(!$('btn-edit')&&!$('btn-edit-phrase')){
+    const edit=document.createElement('button');
+    edit.id='btn-edit-phrase';
+    edit.type='button';
+    edit.className='h-11 px-3 rounded-full border border-tertiary/40 bg-surface-container text-on-surface font-label-lg text-label-lg font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95';
+    edit.innerHTML='<span class="material-symbols-outlined text-[19px]">edit</span><span>Edit phrase</span>';
+    action?.insertBefore(edit,$('btn-speak'));
+    edit.onclick=()=>{
+      const text=$('confirm-text');
+      text.contentEditable='true';
+      text.style.outline='2px solid rgba(0,219,233,.55)';
+      text.style.borderRadius='6px';
+      text.style.padding='4px';
+      text.focus();
+      const selection=getSelection();
+      if(selection){
+        const range=document.createRange();
+        range.selectNodeContents(text);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    };
+  }
+  const text=$('confirm-text');
+  if(text&&!text.dataset.aslEditableBound){
+    text.dataset.aslEditableBound='true';
+    text.addEventListener('input',()=>{
+      const edited=text.textContent.replace(/^[\u201C"]+|[\u201D"]+$/g,'').trim();
+      if(!edited)return;
+      pending=edited;
+      if(window.aslMeta?.key&&window.aslCustomPhrases){
+        window.aslCustomPhrases[window.aslMeta.key]=edited;
+        try{localStorage.setItem('asltalk-custom-phrases-v1',JSON.stringify(window.aslCustomPhrases));}catch(e){}
+      }
+      window.forwardSignedPhrase(edited);
+      $('caption').textContent=q(edited);
+    });
+    text.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();$('btn-speak').click();}
+    });
+  }
+}
 function showConfirm(s,c){pending=s;$('confirm-text').textContent=q(s);$('confirm-conf').textContent=Math.round(c*100)+'%';
-  $('confirm-ring').setAttribute('stroke-dashoffset',(125.6*(1-c)).toFixed(2));box.style.display='flex';}
-const hideConfirm=()=>box.style.display='none';
-$('btn-speak').onclick=()=>{$('caption').textContent=q(pending);speak(pending);window.dispatchEvent(new CustomEvent('spoken',{detail:pending}));hideConfirm();};
+  $('confirm-text').contentEditable='false';$('confirm-text').style.outline='none';
+  $('confirm-ring').setAttribute('stroke-dashoffset',(125.6*(1-c)).toFixed(2));
+  setupConfirmationModal();
+  box.style.display='flex';
+  window.forwardSignedPhrase(s);
+}
+const hideConfirm=()=>{
+  const text=$('confirm-text');
+  if(text){
+    text.contentEditable='false';
+    text.style.outline='none';
+    text.style.padding='';
+  }
+  box.style.display='none';
+};
+$('btn-speak').onclick=()=>{
+ const edited=$('confirm-text').textContent.replace(/^[\u201C"]+|[\u201D"]+$/g,'').trim();
+ if(edited)pending=edited;
+ if(window.aslMeta?.key&&window.aslCustomPhrases){
+   window.aslCustomPhrases[window.aslMeta.key]=pending;
+   try{localStorage.setItem('asltalk-custom-phrases-v1',JSON.stringify(window.aslCustomPhrases));}catch(e){}
+ }
+ $('caption').textContent=q(pending);speak(pending);window.dispatchEvent(new CustomEvent('spoken',{detail:pending}));hideConfirm();
+};
 $('btn-retry').onclick=hideConfirm;
 $('btn-replay').onclick=()=>speak($('caption').textContent.replace(/[\u201C\u201D]/g,'').trim());
+
+const editConfirm=document.createElement('button');
+editConfirm.id='btn-edit';
+editConfirm.type='button';
+editConfirm.setAttribute('aria-label','Edit proposed phrase');
+editConfirm.style.cssText='min-height:44px;border:1px solid #594139;border-radius:999px;background:#32353c;color:#e1e2eb;font:700 14px "Plus Jakarta Sans","Segoe UI",sans-serif;cursor:pointer';
+editConfirm.textContent='Edit phrase';
+editConfirm.onclick=()=>{
+  const text=$('confirm-text');text.contentEditable='true';text.style.outline='2px solid #ff6b35';text.style.borderRadius='8px';text.style.padding='4px';text.focus();
+  text.addEventListener('input',()=>window.forwardSignedPhrase(text.textContent||''),{once:false});
+  if(window.getSelection){const range=document.createRange();range.selectNodeContents(text);range.collapse(false);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);}
+};
+document.querySelector('#screen-confirm .grid')?.appendChild(editConfirm);
 // TEST ONLY: tap the "Gesture Locked" pill or press C to preview the confirm card
-$('gesture-pill').onclick=()=>showConfirm('I need my medicine, please.',0.92);
-addEventListener('keydown',e=>{if(e.key.toLowerCase()==='c')showConfirm('I need my medicine, please.',0.92);});
+$('gesture-pill').onclick=()=>{window.aslMeta=null;showConfirm('I need my medicine, please.',0.92);};
+addEventListener('keydown',e=>{if(e.key.toLowerCase()==='c'){window.aslMeta=null;showConfirm('I need my medicine, please.',0.92);}});
+</script><script>
+(function(){
+  const buttons=[...document.querySelectorAll('button')];
+  const typeButton=buttons.find(button=>button.textContent.includes('Type Reply'));
+  if(!typeButton)return;
+  typeButton.setAttribute('aria-label','Type a reply');
+
+  const overlay=document.createElement('div');
+  overlay.id='type-reply-overlay';
+  overlay.style.cssText='display:none;position:fixed;inset:0;z-index:200;background:rgba(11,14,20,.78);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML=`<form id="type-reply-form" style="width:min(520px,100%);background:#272a31;border:1px solid #594139;border-radius:24px;padding:20px;color:#e1e2eb;font-family:\"Plus Jakarta Sans\",Segoe UI,sans-serif">
+    <h2 style="margin:0 0 12px;font-size:20px">Reply to signer</h2>
+    <textarea id="type-reply-input" rows="4" maxlength="500" required aria-label="Reply text" placeholder="Type your reply..." style="box-sizing:border-box;width:100%;resize:none;border-radius:14px;border:1px solid #594139;background:#1d2026;color:#e1e2eb;padding:12px;font-size:16px"></textarea>
+    <p id="type-reply-error" role="alert" style="display:none;color:#ffb4ab;margin:8px 0 0"></p>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <button type="button" id="type-reply-cancel" style="border:0;border-radius:999px;padding:10px 16px;background:#32353c;color:#e1e2eb;font-weight:700">Cancel</button>
+      <button type="submit" style="border:0;border-radius:999px;padding:10px 16px;background:#ff6b35;color:white;font-weight:700">Send & Speak</button>
+    </div>
+  </form>`;
+  document.body.appendChild(overlay);
+
+  const input=overlay.querySelector('#type-reply-input');
+  const error=overlay.querySelector('#type-reply-error');
+  const close=()=>{
+    overlay.style.display='none';
+    error.style.display='none';
+    input.value='';
+  };
+  typeButton.addEventListener('click',()=>{
+    overlay.style.display='flex';
+    setTimeout(()=>input.focus(),0);
+  });
+  overlay.querySelector('#type-reply-cancel').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  overlay.querySelector('#type-reply-form').addEventListener('submit',e=>{
+    e.preventDefault();
+    const text=input.value.trim();
+    if(!text){
+      error.textContent='Please enter a reply.';
+      error.style.display='block';
+      input.focus();
+      return;
+    }
+    const hearing=document.getElementById('hearing-text');
+    if(hearing)hearing.textContent='"'+text+'"';
+    const status=document.getElementById('hearing-status');
+    if(status)status.textContent='Typed reply';
+    window.dispatchEvent(new CustomEvent('hear',{detail:{text:text,final:true,source:'typed'}}));
+    if(window.forwardStaffReply)window.forwardStaffReply(text);
+    if('speechSynthesis' in window){
+      speechSynthesis.cancel();
+      const utterance=new SpeechSynthesisUtterance(text);
+      utterance.lang='en-US';
+      speechSynthesis.speak(utterance);
+    }
+    close();
+  });
+})();
 </script><script>
 (function(){
 const $=id=>document.getElementById(id);
@@ -112,18 +338,19 @@ function openSummary(){
 const f2=document.createElement('div'); f2.id='f2';
 f2.style.cssText='display:none;position:fixed;inset:0;z-index:95;background:#0b0e14;color:#e1e2eb;flex-direction:column;font-family:'+FONT;
 f2.innerHTML=`<div id="f2-staff" style="flex:1 1 50%;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:18px 22px;overflow:auto">
-  <div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#ffb59d;font-weight:700">Staff view &middot; the patient signed</div>
+  <div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#ffb59d;font-weight:700">Staff view &middot; deaf patient signed this</div>
   <div id="f2-staff-text" style="font-size:clamp(26px,6.5vw,56px);font-weight:800;line-height:1.15">Waiting for the patient&hellip;</div>
-  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button id="f2-staff-mic" style="${BTN2}">Tap to reply by voice</button><span id="f2-staff-hear" style="opacity:.8;font-size:15px"></span></div></div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button id="f2-staff-mic" style="${BTN2}">Staff: tap to reply by voice</button><button id="f2-staff-type" style="${BTN}">Staff: type a reply</button><span id="f2-staff-hear" style="opacity:.8;font-size:15px"></span></div></div>
 <div style="height:3px;background:linear-gradient(90deg,#ff6b35,#9B51E0);flex:none"></div>
 <div id="f2-signer" style="flex:1 1 50%;min-height:0;display:flex;gap:14px;padding:14px 18px;overflow:auto;flex-wrap:wrap;align-content:flex-start">
   <div style="position:relative;flex:0 0 auto;width:clamp(120px,26vw,220px);aspect-ratio:3/4;border-radius:18px;overflow:hidden;background:#000">
     <video id="f2-cam" autoplay playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)"></video>
     <canvas id="f2-skeleton" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);pointer-events:none"></canvas>
+    <div style="position:absolute;left:6px;top:6px;font-size:11px;font-weight:800;padding:4px 8px;border-radius:999px;background:#ff6b35;color:#fff">DEAF PATIENT CAMERA</div>
     <div id="f2-gesture" style="position:absolute;left:6px;right:6px;bottom:6px;font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(11,14,20,.82);text-align:center">&hellip;</div></div>
   <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
-    <div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#7df4ff;font-weight:700">Staff says</div>
-    <div id="f2-hear" style="font-size:clamp(20px,4.5vw,34px);font-weight:700;line-height:1.2">Tap the mic to listen&hellip;</div>
+    <div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#7df4ff;font-weight:700">Patient view &middot; staff response</div>
+    <div id="f2-hear" style="font-size:clamp(20px,4.5vw,34px);font-weight:700;line-height:1.2">Staff reply will appear here and be spoken aloud.</div>
     <div id="f2-follow"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto"><button id="f2-rot" style="${BTN}">Rotate staff view</button><button id="f2-exit" style="${BTN2}">Exit</button></div></div></div>`;
 document.body.appendChild(f2);
@@ -131,6 +358,8 @@ let rot=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches),wl=null;
 const applyRot=()=>$('f2-staff').style.transform=rot?'rotate(180deg)':'none'; applyRot();
 async function openF2(){
   f2.style.display='flex'; document.body.style.overflow='hidden';
+  const confirm=$('confirm-text'),confirmBox=$('screen-confirm');
+  if(confirm&&confirmBox?.style.display==='flex'&&window.forwardSignedPhrase)window.forwardSignedPhrase(confirm.textContent||'');
   const v=$('cam'),c=$('f2-cam');
   if(v&&v.srcObject){c.srcObject=v.srcObject;c.play().catch(()=>{});const sk=$('f2-skeleton');sk.width=v.videoWidth||1280;sk.height=v.videoHeight||720;}
   else $('f2-gesture').textContent='Camera not ready';
@@ -139,16 +368,21 @@ async function openF2(){
 function closeF2(){f2.style.display='none';document.body.style.overflow='';if(wl){wl.release().catch(()=>{});wl=null;}}
 $('f2-exit').onclick=closeF2; $('f2-rot').onclick=()=>{rot=!rot;applyRot();};
 $('f2-staff-mic').onclick=()=>$('btn-mic').click();
+$('f2-staff-type').onclick=()=>{
+  const typeButton=[...document.querySelectorAll('button')].find(button=>button.textContent.includes('Type Reply'));
+  if(typeButton)typeButton.click();
+};
 const mo=(id,fn,o)=>{const n=$(id);if(n)new MutationObserver(fn).observe(n,o||{childList:true,characterData:true,subtree:true});};
 mo('caption',()=>{$('f2-staff-text').textContent=$('caption').textContent.trim();});
-mo('hearing-text',()=>{const t=$('hearing-text').textContent.trim();$('f2-hear').textContent=t;$('f2-staff-hear').textContent=t;});
+mo('hearing-text',()=>{const t=$('hearing-text').textContent.replace(/^[\u201C"]+|[\u201D"]+$/g,'').trim();if(window.forwardStaffReply)window.forwardStaffReply(t);});
+mo('confirm-text',()=>{const t=$('confirm-text').textContent.replace(/^[\u201C"]+|[\u201D"]+$/g,'').trim();if(t&&$('screen-confirm')?.style.display==='flex'&&window.forwardSignedPhrase)window.forwardSignedPhrase(t);},{childList:true,characterData:true,subtree:true});
 const g2=()=>{$('f2-gesture').textContent=($('gesture-label').textContent+' '+$('gesture-conf').textContent).trim();};
 mo('gesture-label',g2); mo('gesture-conf',g2);
-mo('btn-mic',()=>{$('f2-staff-mic').textContent=$('btn-mic').classList.contains('animate-pulse')?'Listening… tap to stop':'Tap to reply by voice';},{attributes:true,attributeFilter:['class']});
+mo('btn-mic',()=>{$('f2-staff-mic').textContent=$('btn-mic').classList.contains('animate-pulse')?'Staff: listening… tap to stop':'Staff: tap to reply by voice';},{attributes:true,attributeFilter:['class']});
 addEventListener('followchange',e=>{const d=e.detail;
   $('f2-follow').innerHTML=d?`<div style="color:#ffb59d;font-weight:700;font-size:15px">Staff asks: ${esc(d.prompt)}</div><div>`+d.options.map(o=>`<span style="display:inline-block;margin:3px 5px 3px 0;padding:4px 12px;border-radius:999px;background:#1d2026;font-size:15px"><b>${esc(o.hs)}</b> ${esc(o.label)}</span>`).join('')+'</div>':'';});
 const fab=document.createElement('button'); fab.id='f2-open'; fab.type='button'; fab.setAttribute('aria-label','Face-to-face mode');
-fab.style.cssText='position:fixed;right:12px;bottom:96px;z-index:60;display:flex;align-items:center;gap:8px;padding:10px 16px;min-height:44px;border-radius:999px;border:0;cursor:pointer;color:#fff;font:700 14px '+FONT+';background:linear-gradient(90deg,#ff6b35,#670fac);box-shadow:0 6px 22px rgba(255,107,53,.45)';
+fab.style.cssText='position:fixed;right:12px;top:96px;z-index:60;display:flex;align-items:center;gap:8px;padding:10px 16px;min-height:44px;border-radius:999px;border:0;cursor:pointer;color:#fff;font:700 14px '+FONT+';background:linear-gradient(90deg,#ff6b35,#670fac);box-shadow:0 6px 22px rgba(255,107,53,.45)';
 fab.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v13M7 4 4 7M7 4l3 3"/><path d="M17 20V7M17 20l-3-3M17 20l3-3"/></svg><span>Face-to-face</span>';
 fab.onclick=openF2; document.body.appendChild(fab);
 
@@ -177,10 +411,10 @@ const HANDS=[
  {id:'Y',    name:'Y',hint:'Thumb and pinky out, others curled'}];
 // ====== What each handshape means in each mode (edit freely) ======
 const PHRASES={
- pharmacy:{ONE:'I need to pick up my prescription, please.',TWO:'Is this safe with my other medicines?',THREE:'How many times a day should I take it?',W:'Can I have some water?',Y:'Can you call my doctor, please?'},
- hospital:{ONE:'I need a doctor.',TWO:'I am in pain.',THREE:'I need an ASL interpreter, please.',W:'Can I have some water?',Y:'Please call my family.'},
- bank:{ONE:'I want to check my account balance.',TWO:'I want to make a deposit.',THREE:'I want to withdraw money.',FOUR:'I would like to speak with a manager.',Y:'Can you call me when it is ready?'},
- shop:{ONE:'How much does this cost?',TWO:'Where can I find this item?',THREE:'Do you have a different size?',FOUR:'Can I pay by card?',FIVE:'Thank you.'}};
+ pharmacy:{ONE:'I need to pick up my prescription, please.',TWO:'Is this safe with my other medicines?',THREE:'How many times a day should I take it?',FOUR:'Can I pay by card?',FIVE:'Thank you. That is helpful.',W:'Can I have some water?',Y:'Can you call my doctor, please?'},
+ hospital:{ONE:'I need a doctor.',TWO:'I am in pain.',THREE:'I need an ASL interpreter, please.',FOUR:'I need help communicating with the care team.',FIVE:'I need a bathroom.',W:'Can I have some water?',Y:'Please call my family.'},
+ bank:{ONE:'I want to check my account balance.',TWO:'I want to make a deposit.',THREE:'I want to withdraw money.',FOUR:'I would like to speak with a manager.',FIVE:'Thank you for your help.',W:'Can I pay with cash?',Y:'Can you call me when it is ready?'},
+ shop:{ONE:'How much does this cost?',TWO:'Where can I find this item?',THREE:'Do you have a different size?',FOUR:'Can I pay by card?',FIVE:'Thank you.',W:'Can you show me another option?',Y:'Where is the nearest exit?'}};
 const ctx=()=>window.currentContext||'pharmacy';
 // ====== Follow-up questions: after a sentence is spoken, the nurse asks and the signer answers with the SAME 7 handshapes ======
 const FOLLOW={
@@ -189,12 +423,93 @@ const FOLLOW={
 const TRIGGER={'hospital:TWO':'pain'};   // mode:handshape -> which follow-up starts after it is spoken
 let follow=null,pendingMeta=null;
 const active=()=>follow?follow.options:PHRASES[ctx()];
-const sentenceOf=l=>{const v=active()[l];return Array.isArray(v)?v[1]:v;};
+const customPhrase=l=>!follow?window.aslCustomPhrases?.[ctx()+':'+l]:null;
+const sentenceOf=l=>{if(customPhrase(l))return customPhrase(l);const v=active()[l];return Array.isArray(v)?v[1]:v;};
 const labelOf=l=>{const v=active()[l];return Array.isArray(v)?v[0]:'Handshape '+HANDS.find(h=>h.id===l).name;};
 const MAX_DIST=0.5, HOLD_FRAMES=12;
 let samples=[]; try{samples=JSON.parse(localStorage.getItem('asltalk-samples-v2')||'[]');}catch(e){}
-const save=()=>{try{localStorage.setItem('asltalk-samples-v2',JSON.stringify(samples));}catch(e){}};
+const save=()=>{try{localStorage.setItem('asltalk-samples-v2',JSON.stringify(samples));}catch(e){}
+  fetch('/api/samples',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({samples})}).catch(()=>{});
+};
+async function syncPythonSamples(){
+  try{
+    const response=await fetch('/api/samples');
+    if(!response.ok)return;
+    const data=await response.json();
+    if(Array.isArray(data.samples)&&data.samples.length){
+      samples=data.samples;
+      localStorage.setItem('asltalk-samples-v2',JSON.stringify(samples));
+      updatePanel();
+    }else if(samples.length) save();
+  }catch(_){}
+}
+syncPythonSamples();
 const setLabel=(t,c='')=>{g('gesture-label').textContent=t;g('gesture-conf').textContent=c;};
+
+// ---------- judge-safe demo mode and runtime status ----------
+const runtimeStatus=document.createElement('div');
+runtimeStatus.id='runtime-status';
+runtimeStatus.style.cssText='position:fixed;left:12px;bottom:112px;z-index:85;width:min(300px,calc(100vw - 24px));padding:10px 12px;border-radius:14px;background:#272a31;color:#e1bfb5;border:1px solid #594139;font:12px/1.45 "Plus Jakarta Sans","Segoe UI",sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+runtimeStatus.setAttribute('role','status');
+runtimeStatus.setAttribute('aria-live','polite');
+runtimeStatus.innerHTML='<b>System status</b><br><span id="runtime-status-text">Starting…</span>';
+document.body.appendChild(runtimeStatus);
+
+function setRuntimeStatus(text){g('runtime-status-text').textContent=text;}
+async function checkPythonAI(){
+  try{
+    const response=await fetch('/api/health');
+    if(!response.ok)throw new Error('unavailable');
+    const data=await response.json();
+    setRuntimeStatus(data.language==='python'?'Python AI ready • Camera setup may continue':'Python AI unavailable • Demo mode available');
+  }catch(_){
+    setRuntimeStatus('Python AI unavailable • Browser fallback disabled');
+  }
+}
+checkPythonAI(); setInterval(checkPythonAI,10000);
+
+const demoPanel=document.createElement('div');
+demoPanel.id='demo-panel';
+demoPanel.style.cssText='position:fixed;left:12px;top:96px;z-index:86;width:min(340px,calc(100vw - 24px));display:none;padding:14px;border-radius:18px;background:#272a31;color:#e1e2eb;border:1px solid #594139;font:13px/1.5 "Plus Jakarta Sans","Segoe UI",sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.55)';
+demoPanel.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><b>Quick Start Demo</b><div style="opacity:.7">Deterministic presentation mode</div></div><button id="demo-close" type="button" aria-label="Close demo mode" style="width:44px;height:44px;border:0;border-radius:50%;background:#32353c;color:#e1e2eb;cursor:pointer">×</button></div><div id="demo-buttons" style="display:grid;gap:8px;margin-top:12px"></div><p style="opacity:.7;margin:10px 0 0">Camera-free demo. Phrases require confirmation before speech.</p>';
+document.body.appendChild(demoPanel);
+
+const demoButton=document.createElement('button');
+demoButton.type='button';
+demoButton.id='quick-demo';
+demoButton.setAttribute('aria-label','Open Quick Start Demo');
+demoButton.style.cssText='position:fixed;right:12px;bottom:96px;z-index:87;min-height:44px;border:0;border-radius:999px;padding:10px 16px;background:#32353c;color:#fff;font:700 14px "Plus Jakarta Sans","Segoe UI",sans-serif;border:1px solid #594139;cursor:pointer';
+demoButton.textContent='Quick Start Demo';
+document.body.appendChild(demoButton);
+
+const DEMO_SCENARIOS=[
+ {label:'1 • Medicine pickup',context:'pharmacy',hand:'ONE',text:'I need to pick up my prescription, please.'},
+ {label:'2 • Drug safety',context:'pharmacy',hand:'TWO',text:'Is this safe with my other medicines?'},
+ {label:'3 • Doctor needed',context:'hospital',hand:'ONE',text:'I need a doctor.'},
+ {label:'W • Request water',context:'hospital',hand:'W',text:'Can I have some water?'},
+ {label:'4 • Pain in stomach',context:'hospital',hand:'FOUR',text:'I have pain in my stomach.'}
+];
+function openDemo(){demoPanel.style.display='block';demoPanel.scrollTop=0;}
+demoButton.onclick=openDemo;
+demoPanel.querySelector('#demo-close').onclick=()=>demoPanel.style.display='none';
+const demoButtons=demoPanel.querySelector('#demo-buttons');
+DEMO_SCENARIOS.forEach(item=>{
+  const button=document.createElement('button');
+  button.type='button';
+  button.textContent=item.label;
+  button.style.cssText='min-height:44px;text-align:left;border:1px solid #594139;border-radius:12px;background:#1d2026;color:#e1e2eb;padding:10px 12px;font-weight:700;cursor:pointer';
+  button.onclick=()=>{
+    window.currentContext=item.context;
+    window.dispatchEvent(new Event('ctxchange'));
+    const key=item.context+':'+item.hand;
+    window.aslMeta={sentence:item.text,key,inFollow:false,label:item.label,topic:'Judge-safe demo'};
+    g('signer-text').textContent='"'+item.label+'"';
+    setRuntimeStatus('Demo profile ready • Confirmation required');
+    window.showConfirm(window.aslCustomPhrases?.[key]||item.text,0.92);
+    demoPanel.style.display='none';
+  };
+  demoButtons.appendChild(button);
+});
 
 // ---------- skeleton drawing ----------
 const CONN=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
@@ -222,6 +537,27 @@ function predict(v){
   const votes={}; top.forEach(t=>votes[t.l]=(votes[t.l]||0)+1);
   const [l,n]=Object.entries(votes).sort((a,b)=>b[1]-a[1])[0], mine=top.filter(t=>t.l===l);
   return {label:l,conf:n/5,dist:mine.reduce((a,t)=>a+t.d,0)/n};
+}
+let pythonPrediction=null,pythonPredictionTime=-Infinity,pythonPredictionPending=false;
+async function predictWithPython(v){
+  if(pythonPredictionPending)return;
+  pythonPredictionPending=true;
+  try{
+    const response=await fetch('/api/predict',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({vector:v,allowed:Object.keys(active())})
+    });
+    if(response.ok){
+      const data=await response.json();
+      pythonPrediction=data.prediction||null;
+      pythonPredictionTime=performance.now();
+      setRuntimeStatus('Python AI ready • '+(pythonPrediction?pythonPrediction.label:'Low confidence / no match'));
+    }
+    else setRuntimeStatus('Python AI response error • Recognition degraded');
+  }catch(_){setRuntimeStatus('Python AI unavailable • Recognition degraded');}
+  pythonPredictionPending=false;
+  return false;
 }
 let last=null,streak=0,cool=0,recIdx=null,guided=null,panelMsg='';
 function onPrediction(p){
@@ -252,20 +588,46 @@ function renderBanner(){
 function startFollow(id){follow=FOLLOW[id];last=null;streak=0;cool=performance.now()+1500;renderBanner();}
 function endFollow(){follow=null;last=null;streak=0;renderBanner();}
 addEventListener('spoken',e=>{   // fired when "Speak it" is tapped
-  const mta=pendingMeta; pendingMeta=null; if(!mta||mta.sentence!==e.detail) return;
+  const mta=pendingMeta; pendingMeta=null; if(!mta) return;
   if(mta.inFollow){ if(follow&&follow.next) startFollow(follow.next); else endFollow(); }
   else if(TRIGGER[mta.key]) startFollow(TRIGGER[mta.key]);
 });
 // ---------- training panel ----------
 const panel=document.createElement('div');
-panel.style.cssText='position:fixed;top:80px;right:12px;z-index:90;display:none;padding:12px 14px;border-radius:16px;background:#272a31;color:#e1e2eb;font:13px/1.55 "Plus Jakarta Sans","Segoe UI",sans-serif;width:340px;max-width:calc(100vw - 24px);box-shadow:0 8px 30px rgba(0,0,0,.5)';
+panel.style.cssText='position:fixed;top:80px;right:12px;z-index:90;display:none;padding:12px 14px;border-radius:16px;background:#272a31;color:#e1e2eb;font:13px/1.55 "Plus Jakarta Sans","Segoe UI",sans-serif;width:340px;max-width:calc(100vw - 24px);max-height:calc(100vh - 96px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 8px 30px rgba(0,0,0,.5)';
 document.body.appendChild(panel);
 function updatePanel(){
   const ph=PHRASES[ctx()];
+  const escape=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   panel.innerHTML=(panelMsg?`<div style="background:#ff6b35;color:#fff;padding:6px 10px;border-radius:10px;margin-bottom:8px"><b>${panelMsg}</b></div>`:'')
    +`<b>Mode: ${ctx().toUpperCase()}</b><br>`
-   +HANDS.map((h,i)=>`<b>${i+1}</b> Handshape ${h.name} (${samples.filter(m=>m.l===h.id).length}) <span style="opacity:.7">${h.hint}</span><br><span style="color:#00dbe9">&rarr; ${ph[h.id]||'(not used in this mode)'}</span>`).join('<br>')
-   +'<br><br><b>G</b> guided training (all 7) &nbsp; hold <b>1-7</b> to record one<br><b>E</b> export &nbsp; <b>I</b> import &nbsp; <b>X</b> clear &nbsp; <b>T</b> close';
+   +HANDS.map((h,i)=>{
+      const custom=window.aslCustomPhrases?.[ctx()+':'+h.id];
+      const phrase=custom||ph[h.id]||'(not used in this mode)';
+      return `<div style="margin-top:8px"><b>${i+1}</b> Handshape ${h.name} (${samples.filter(m=>m.l===h.id).length}) <span style="opacity:.7">${escape(h.hint)}</span><br>
+        <input data-phrase-key="${ctx()+':'+h.id}" aria-label="Phrase for handshape ${i+1}" value="${escape(phrase)}" style="width:100%;box-sizing:border-box;margin-top:5px;padding:7px 9px;border-radius:8px;border:1px solid #594139;background:#1d2026;color:#e1bfb5">
+        <button data-save-phrase="${ctx()+':'+h.id}" type="button" style="margin-top:5px;margin-right:6px;border:0;border-radius:999px;padding:5px 10px;background:#ff6b35;color:#fff;cursor:pointer">Save phrase</button>
+        ${custom?' <button data-reset-phrase="'+(ctx()+':'+h.id)+'" type="button" style="border:0;border-radius:999px;padding:5px 10px;background:#32353c;color:#e1e2eb;cursor:pointer">Reset</button><span style="color:#ffb59d"> (edited)</span>':''}</div>`;
+    }).join('<br>')
+   +'<br><br><b>G</b> guided training (all 7) &nbsp; hold <b>1-7</b> to record one<br><b>E</b> export &nbsp; <b>I</b> import &nbsp; <b>X</b> clear samples &nbsp; <b>R</b> reset edited phrases &nbsp; <b>T</b> close';
+  panel.querySelectorAll('[data-save-phrase]').forEach(button=>{
+    button.onclick=()=>{
+      const key=button.dataset.savePhrase;
+      const input=panel.querySelector('[data-phrase-key="'+key+'"]');
+      const value=input?.value.trim();
+      if(!value)return;
+      window.aslCustomPhrases[key]=value;
+      try{localStorage.setItem('asltalk-custom-phrases-v1',JSON.stringify(window.aslCustomPhrases));}catch(e){}
+      updatePanel();
+    };
+  });
+  panel.querySelectorAll('[data-reset-phrase]').forEach(button=>{
+    button.onclick=()=>{
+      delete window.aslCustomPhrases[button.dataset.resetPhrase];
+      try{localStorage.setItem('asltalk-custom-phrases-v1',JSON.stringify(window.aslCustomPhrases));}catch(e){}
+      updatePanel();
+    };
+  });
 }
 updatePanel(); addEventListener('ctxchange',()=>{endFollow();updatePanel();});
 function exportSamples(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(samples)],{type:'application/json'}));a.download='asltalk-samples.json';a.click();}
@@ -277,6 +639,11 @@ addEventListener('keydown',e=>{
   if(i>-1&&e.key.length===1&&!guided) recIdx=i;
   if(k==='t') panel.style.display=panel.style.display==='block'?'none':'block';
   if(k==='x'){samples=[];save();updatePanel();}
+  if(k==='r'){
+    window.aslCustomPhrases={};
+    try{localStorage.removeItem('asltalk-custom-phrases-v1');}catch(e){}
+    updatePanel();
+  }
   if(k==='e') exportSamples(); if(k==='i') importSamples();
   if(k==='g'&&!guided){guided={i:0,phase:'count',t0:performance.now()};panel.style.display='block';}
 });
@@ -308,14 +675,23 @@ function loop(){
     if(guided) stepGuided(performance.now(),hand);
     else if(!hand){last=null;streak=0;setLabel('Show your hand');}
     else if(recIdx!==null){const h=HANDS[recIdx];samples.push({l:h.id,v:vec(hand)});setLabel('Recording '+h.name,samples.filter(m=>m.l===h.id).length);}
-    else onPrediction(predict(vec(hand)));
+    else{
+      const vector=vec(hand);
+      if(performance.now()-pythonPredictionTime>100)predictWithPython(vector);
+      if(pythonPredictionTime>=0&&performance.now()-pythonPredictionTime<1500)
+        onPrediction(pythonPrediction);
+      else
+        setLabel('Waiting for Python AI…');
+    }
   }
   requestAnimationFrame(loop);
 }
 async function startTracking(){
   try{
     setLabel('Starting camera…');
+    setRuntimeStatus('Camera permission requested');
     const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false});
+    setRuntimeStatus('Camera ready • Loading MediaPipe');
     const v=g('cam'); v.srcObject=stream; await v.play();
     const c=g('skeleton'); c.width=v.videoWidth; c.height=v.videoHeight;
     v.style.display='block'; c.style.display='block'; g('cam-photo').style.display='none'; g('hand-svg').style.display='none';
@@ -323,8 +699,26 @@ async function startTracking(){
     const fs=await FilesetResolver.forVisionTasks(WASM);
     const opts=d=>({baseOptions:{modelAssetPath:MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
     try{lmk=await HandLandmarker.createFromOptions(fs,opts('GPU'));}catch(e){lmk=await HandLandmarker.createFromOptions(fs,opts('CPU'));}
+    setRuntimeStatus('MediaPipe and Python AI status checking');
     setLabel(samples.length<10?'Press G to train handshapes':'Show your hand'); loop();
-  }catch(err){console.error(err);setLabel('Camera or model failed (see console)');}
+  }catch(err){
+    console.error('ASLTalk startup failed:',err);
+    let message='Camera or hand model failed';
+    if(err?.name==='NotAllowedError'||err?.name==='SecurityError')
+      message='Camera blocked — allow access in the address bar';
+    else if(err?.name==='NotFoundError'||err?.name==='DevicesNotFoundError')
+      message='No camera found on this device';
+    else if(err?.name==='NotReadableError'||err?.name==='TrackStartError')
+      message='Camera is busy — close other camera apps';
+    else if(err?.name==='OverconstrainedError')
+      message='Camera settings unavailable — click here to retry';
+    else
+      message='Hand model failed — click here to retry';
+    setRuntimeStatus(message+' • Quick Start Demo is available');
+    setLabel(message);
+    const status=g('gesture-label').parentElement;
+    if(status){status.style.cursor='pointer';status.onclick=()=>location.reload();}
+  }
 }
 startTracking();
 
