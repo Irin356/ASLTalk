@@ -527,17 +527,9 @@ function drawOn(c,hands){
 }
 
 function draw(hands){drawOn(g('skeleton'),hands);const c2=g('f2-skeleton');if(c2&&c2.width&&g('f2')&&g('f2').style.display==='flex')drawOn(c2,hands);}
-// ---------- classifier: nearest neighbours, only among handshapes used in the current mode ----------
+// ---------- Python classification: this browser only prepares landmark features ----------
 const r4=x=>Math.round(x*1e4)/1e4;
 function vec(lm){const w=lm[0],s=Math.hypot(lm[9].x-w.x,lm[9].y-w.y)||1;return lm.flatMap(p=>[r4((p.x-w.x)/s),r4((p.y-w.y)/s)]);}
-function predict(v){
-  const allowed=Object.keys(active()), pool=samples.filter(s=>allowed.includes(s.l));
-  if(pool.length<10) return null;
-  const top=pool.map(s=>({l:s.l,d:Math.sqrt(s.v.reduce((a,x,i)=>a+(x-v[i])**2,0)/21)})).sort((a,b)=>a.d-b.d).slice(0,5);
-  const votes={}; top.forEach(t=>votes[t.l]=(votes[t.l]||0)+1);
-  const [l,n]=Object.entries(votes).sort((a,b)=>b[1]-a[1])[0], mine=top.filter(t=>t.l===l);
-  return {label:l,conf:n/5,dist:mine.reduce((a,t)=>a+t.d,0)/n};
-}
 let pythonPrediction=null,pythonPredictionTime=-Infinity,pythonPredictionPending=false;
 async function predictWithPython(v){
   if(pythonPredictionPending)return;

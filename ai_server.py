@@ -40,6 +40,8 @@ def save_samples(samples):
 def predict(vector, allowed):
     if len(vector) != 42:
         raise ValueError("vector must contain 42 values")
+    if any(not isinstance(value, (int, float)) for value in vector):
+        raise ValueError("vector values must be numeric")
 
     pool = [
         sample

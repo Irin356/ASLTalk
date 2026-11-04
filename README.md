@@ -26,7 +26,7 @@ ASLTalk is a real-time, browser-based American Sign Language (ASL) communication
 6. The browser shows a confirmation step before speaking the phrase.
 7. Web Speech Recognition handles the hearing participant's voice, while Speech Synthesis speaks translated text.
 
-The browser is the primary interface and camera runtime. Python is the primary AI/ML classification and server-side sample-storage component. JavaScript remains responsible for UI behavior, MediaPipe landmark extraction, camera and speech integration, and demo presentation controls.
+Python is the primary language for the custom AI/ML path. The complete nearest-neighbor classifier, confidence calculation, distance calculation, sample training storage, and prediction API run in Python (`ai_server.py`); there is no browser-side classifier fallback. JavaScript remains responsible for UI behavior, MediaPipe hand-landmark extraction, camera and speech integration, and demo presentation controls.
 
 ## Judge Demo
 
